@@ -1,0 +1,281 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "API para gestão de faturas",
+        "title": "API Gestor de Faturas",
+        "contact": {},
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/",
+    "paths": {
+        "/faturas": {
+            "get": {
+                "description": "Retorna a lista completa de faturas do banco",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "faturas"
+                ],
+                "summary": "Lista todas as faturas",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/fatura.Fatura"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Insere uma nova fatura no banco",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "faturas"
+                ],
+                "summary": "Cria uma nova fatura",
+                "parameters": [
+                    {
+                        "description": "Dados da fatura",
+                        "name": "fatura",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/fatura.Fatura"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/fatura.Fatura"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/faturas/{id}": {
+            "delete": {
+                "description": "Remove uma fatura do banco pelo ID",
+                "tags": [
+                    "faturas"
+                ],
+                "summary": "Deleta uma fatura",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da fatura",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/faturas/{id}/status": {
+            "patch": {
+                "description": "Altera o status de uma fatura pelo ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "faturas"
+                ],
+                "summary": "Atualiza o status de uma fatura",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da fatura",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Novo status",
+                        "name": "status",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/faturas/{id}/upload": {
+            "post": {
+                "description": "Recebe o PDF da fatura, salva em disco e atualiza o status para APROVADA_GESTOR",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "faturas"
+                ],
+                "summary": "Upload de arquivo da fatura",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da fatura",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "Arquivo PDF da fatura",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "fatura.Fatura": {
+            "type": "object",
+            "properties": {
+                "dataVencimento": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "numeroVinculo": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "valorTotal": {
+                    "type": "number",
+                    "format": "float64"
+                }
+            }
+        }
+    }
+}

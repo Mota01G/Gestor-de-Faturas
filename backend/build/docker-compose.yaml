@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  postgres_db:
+    image: postgres:15-alpine
+    container_name: faturas_db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: adminpassword
+      POSTGRES_DB: controladoria
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+volumes:
+  pg_data:

@@ -1,0 +1,7 @@
+# Ignorar pastas do editor e de ambiente
+frontend/.workspace/
+frontend/node_modules/
+frontend/dist/
+
+# Ignorar arquivos do backend que não devem ir pro Git
+backend/uploads/

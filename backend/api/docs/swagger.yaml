@@ -1,0 +1,187 @@
+basePath: /
+definitions:
+  fatura.Fatura:
+    properties:
+      dataVencimento:
+        type: string
+      id:
+        type: string
+      numeroVinculo:
+        type: string
+      status:
+        type: string
+      valorTotal:
+        format: float64
+        type: number
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API para gestão de faturas
+  title: API Gestor de Faturas
+  version: "1.0"
+paths:
+  /faturas:
+    get:
+      description: Retorna a lista completa de faturas do banco
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/fatura.Fatura'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Lista todas as faturas
+      tags:
+      - faturas
+    post:
+      consumes:
+      - application/json
+      description: Insere uma nova fatura no banco
+      parameters:
+      - description: Dados da fatura
+        in: body
+        name: fatura
+        required: true
+        schema:
+          $ref: '#/definitions/fatura.Fatura'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/fatura.Fatura'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Cria uma nova fatura
+      tags:
+      - faturas
+  /faturas/{id}:
+    delete:
+      description: Remove uma fatura do banco pelo ID
+      parameters:
+      - description: ID da fatura
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Deleta uma fatura
+      tags:
+      - faturas
+  /faturas/{id}/status:
+    patch:
+      consumes:
+      - application/json
+      description: Altera o status de uma fatura pelo ID
+      parameters:
+      - description: ID da fatura
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Novo status
+        in: body
+        name: status
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Atualiza o status de uma fatura
+      tags:
+      - faturas
+  /faturas/{id}/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Recebe o PDF da fatura, salva em disco e atualiza o status para
+        APROVADA_GESTOR
+      parameters:
+      - description: ID da fatura
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Arquivo PDF da fatura
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Upload de arquivo da fatura
+      tags:
+      - faturas
+swagger: "2.0"

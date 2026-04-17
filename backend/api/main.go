@@ -1,0 +1,237 @@
+// @title           API Gestor de Faturas
+// @version         1.0
+// @description     API para gestão de faturas
+// @host            localhost:8080
+// @BasePath        /
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	_ "github.com/Mota01G/Gestor-de-Faturas/api/docs"
+	"github.com/Mota01G/Gestor-de-Faturas/internal/fatura"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	_ "github.com/lib/pq"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+)
+
+var repo *fatura.Repository
+
+func main() {
+	db, err := conectar()
+	if err != nil {
+		panic(err)
+	}
+
+	repo = fatura.NewRepository(db)
+	router := gin.Default()
+	corsConfig := cors.Config{
+		AllowOrigins: []string{"http://localhost:5173"},
+		AllowMethods: []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders: []string{
+			"Origin",
+			"Content-Type",
+			"Accept",
+			"Authorization",
+		},
+		ExposeHeaders: []string{
+			"Content-Length",
+		},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}
+
+	router.Use(cors.New(corsConfig))
+	router.GET("/faturas", getFaturasHandler)
+	router.GET("/faturas/:id", getFaturaByIDHandler)
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	router.POST("/faturas", addFaturaHandler)
+	router.POST("/faturas/:id/upload", uploadFaturaHandler)
+	router.DELETE("/faturas/:id", deleteFaturaHandler)
+	router.PATCH("/faturas/:id/status", updateStatusHandler)
+	router.Static("/uploads", "./uploads")
+	router.Run("localhost:8080")
+}
+
+func conectar() (*sql.DB, error) {
+	stringDeConexao := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		"localhost", 5432, "admin", "adminpassword", "controladoria", "disable",
+	)
+
+	db, err := sql.Open("postgres", stringDeConexao)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := db.Ping(); err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
+func helloHandler(c *gin.Context) {
+	c.IndentedJSON(http.StatusOK, "Meu primeiro enfpoint GET em golang")
+}
+
+// @Summary      Lista todas as faturas
+// @Description  Retorna a lista completa de faturas do banco
+// @Tags         faturas
+// @Produce      json
+// @Success      200  {array}   fatura.Fatura
+// @Failure      500  {object}  map[string]string
+// @Router       /faturas [get]
+func getFaturasHandler(c *gin.Context) {
+	faturas, err := repo.Listar()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.IndentedJSON(http.StatusOK, faturas)
+}
+
+// @Summary      Cria uma nova fatura
+// @Description  Insere uma nova fatura no banco
+// @Tags         faturas
+// @Accept       json
+// @Produce      json
+// @Param        fatura  body      fatura.Fatura  true  "Dados da fatura"
+// @Success      201     {object}  fatura.Fatura
+// @Failure      400     {object}  map[string]string
+// @Failure      500     {object}  map[string]string
+// @Router       /faturas [post]
+func addFaturaHandler(c *gin.Context) {
+	var novaFatura fatura.Fatura
+
+	// 1. Decodifica o JSON que veio do React
+	if err := c.ShouldBindJSON(&novaFatura); err != nil {
+		c.JSON(400, gin.H{"error": "Dados inválidos: " + err.Error()})
+		return
+	}
+
+	// 2. Chama o repositório que agora devolve o ID
+	idGerado, err := repo.Criar(novaFatura)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Erro ao guardar no banco de dados"})
+		return
+	}
+
+	// 3. Devolvemos a fatura com o ID preenchido para o Frontend
+	novaFatura.ID = idGerado
+	c.JSON(201, novaFatura)
+}
+
+// @Summary      Deleta uma fatura
+// @Description  Remove uma fatura do banco pelo ID
+// @Tags         faturas
+// @Param        id   path      string  true  "ID da fatura"
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /faturas/{id} [delete]
+func deleteFaturaHandler(c *gin.Context) {
+	id := c.Param("id")
+	if err := repo.Deletar(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Fatura deletada com sucesso"})
+
+}
+
+// @Summary      Atualiza o status de uma fatura
+// @Description  Altera o status de uma fatura pelo ID
+// @Tags         faturas
+// @Accept       json
+// @Produce      json
+// @Param        id      path      string              true  "ID da fatura"
+// @Param        status  body      map[string]string   true  "Novo status"
+// @Success      200     {object}  map[string]string
+// @Failure      400     {object}  map[string]string
+// @Failure      500     {object}  map[string]string
+// @Router       /faturas/{id}/status [patch]
+func updateStatusHandler(c *gin.Context) {
+	id := c.Param("id")
+
+	var body map[string]string
+	if err := c.BindJSON(&body); err != nil {
+		return
+	}
+
+	status, ok := body["status"]
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "campo status é obrigatório"})
+		return
+	}
+
+	if err := repo.AtualizarStatus(id, status); err != nil {
+		// 1. Verifica se é o nosso erro customizado de regra de negócio
+		if strings.Contains(err.Error(), "transição") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// 2. Se não contiver a palavra, é um erro real (banco caiu, etc), então devolve 500
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Status atualizado com sucesso"})
+}
+
+// @Summary      Upload de arquivo da fatura
+// @Description  Recebe o PDF da fatura, salva em disco e atualiza o status para APROVADA_GESTOR
+// @Tags         faturas
+// @Accept       multipart/form-data
+// @Produce      json
+// @Param        id    path      string  true  "ID da fatura"
+// @Param        file  formData  file    true  "Arquivo PDF da fatura"
+// @Success      200   {object}  map[string]string
+// @Failure      400   {object}  map[string]string
+// @Failure      500   {object}  map[string]string
+// @Router       /faturas/{id}/upload [post]
+func uploadFaturaHandler(c *gin.Context) {
+	id := c.Param("id")
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "arquivo não encontrado"})
+		return
+	}
+
+	caminho := fmt.Sprintf("uploads/%s_%s", id, file.Filename)
+
+	if err := c.SaveUploadedFile(file, caminho); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao salvar arquivo"})
+		return
+	}
+
+	if err := repo.SalvarCaminhoArquivo(id, caminho); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Upload realizado com sucesso",
+		"caminho": caminho,
+	})
+}
+
+func getFaturaByIDHandler(c *gin.Context) {
+	id := c.Param("id")
+
+	fatura, err := repo.GetFaturaByID(id)
+	if err != nil {
+		// se não encontrar, devolve 404
+		c.JSON(http.StatusNotFound, gin.H{"error": "fatura não encontrada"})
+		return
+	}
+
+	c.JSON(http.StatusOK, fatura)
+}
