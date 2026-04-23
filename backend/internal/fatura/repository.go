@@ -6,6 +6,32 @@ import (
 	"fmt"
 )
 
+type Usuario struct {
+	ID    string `json:"id"`
+	Nome  string `json:"nome"`
+	Email string `json:"email"`
+	Cargo string `json:"cargo"`
+}
+
+func (r *Repository) Autenticar(email string, senha string) (Usuario, error) {
+	var u Usuario
+
+	err := r.db.QueryRow(`
+		SELECT id, nome, email, cargo
+		FROM usuarios
+		WHERE email = $1 AND senha_hash = $2
+	`, email, senha).Scan(&u.ID, &u.Nome, &u.Email, &u.Cargo)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return Usuario{}, errors.New("e-mail ou senha incorretos")
+		}
+		return Usuario{}, err
+	}
+
+	return u, nil
+}
+
 type Fatura struct {
 	ID             string
 	NumeroVinculo  string
@@ -13,6 +39,7 @@ type Fatura struct {
 	DataVencimento string
 	Status         string
 	CaminhoArquivo *string
+	GestorID       *string
 }
 
 type Repository struct {
@@ -25,8 +52,11 @@ func NewRepository(db *sql.DB) *Repository {
 
 func (r *Repository) GetFaturaByID(id string) (Fatura, error) {
 	var f Fatura
+	var caminho sql.NullString  // Escudo contra NULL
+	var gestorID sql.NullString // Escudo contra NULL para o dono da fatura
+
 	err := r.db.QueryRow(`
-		SELECT id, numero_vinculo, valor_total, data_vencimento, status, caminho_arquivo
+		SELECT id, numero_vinculo, valor_total, data_vencimento, status, caminho_arquivo, gestor_id
 		FROM faturas
 		WHERE id = $1
 	`, id).Scan(
@@ -35,19 +65,38 @@ func (r *Repository) GetFaturaByID(id string) (Fatura, error) {
 		&f.ValorTotal,
 		&f.DataVencimento,
 		&f.Status,
-		&f.CaminhoArquivo,
+		&caminho,
+		&gestorID,
 	)
+
 	if err != nil {
 		return Fatura{}, err
 	}
+
+	// Repassa os valores seguros para a nossa Struct
+	if caminho.Valid {
+		f.CaminhoArquivo = &caminho.String
+	}
+	if gestorID.Valid {
+		f.GestorID = &gestorID.String
+	}
+
 	return f, nil
 }
 
-func (r *Repository) Listar() ([]Fatura, error) {
-	rows, err := r.db.Query(`
-		SELECT id, numero_vinculo, valor_total, data_vencimento, status
-		FROM faturas
-	`)
+func (r *Repository) Listar(gestorID string) ([]Fatura, error) {
+	// A nossa query base
+	query := `SELECT id, numero_vinculo, valor_total, data_vencimento, status, caminho_arquivo, gestor_id FROM faturas`
+	var args []interface{} // Slice para guardar os parâmetros com segurança contra SQL Injection
+
+	// Se o comando enviou um gestor_id, adicionamos o filtro WHERE
+	if gestorID != "" {
+		query += ` WHERE gestor_id = $1`
+		args = append(args, gestorID)
+	}
+
+	// Executa a query com ou sem os filtros
+	rows, err := r.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -56,18 +105,37 @@ func (r *Repository) Listar() ([]Fatura, error) {
 	var faturas []Fatura
 	for rows.Next() {
 		var f Fatura
-		if err := rows.Scan(&f.ID,
+		var caminho sql.NullString
+		var dbGestorID sql.NullString // Variável interna para não conflitar
+
+		if err := rows.Scan(
+			&f.ID,
 			&f.NumeroVinculo,
 			&f.ValorTotal,
 			&f.DataVencimento,
 			&f.Status,
-			&f.CaminhoArquivo); err != nil {
+			&caminho,
+			&dbGestorID,
+		); err != nil {
 			return nil, err
 		}
+
+		if caminho.Valid {
+			f.CaminhoArquivo = &caminho.String
+		}
+		if dbGestorID.Valid {
+			f.GestorID = &dbGestorID.String
+		}
+
 		faturas = append(faturas, f)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+
+	// Evita que o Go envie 'null' no JSON quando o array estiver vazio
+	if faturas == nil {
+		faturas = []Fatura{}
 	}
 
 	return faturas, nil

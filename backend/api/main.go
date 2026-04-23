@@ -56,7 +56,31 @@ func main() {
 	router.DELETE("/faturas/:id", deleteFaturaHandler)
 	router.PATCH("/faturas/:id/status", updateStatusHandler)
 	router.Static("/uploads", "./uploads")
+	router.POST("/login", loginHandler)
 	router.Run("localhost:8080")
+}
+
+func loginHandler(c *gin.Context) {
+	var credenciais struct {
+		Email string `json:"email"`
+		Senha string `json:"senha"`
+	}
+
+	// 1. Lê o JSON que vem do frontend
+	if err := c.ShouldBindJSON(&credenciais); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "dados em formato inválido"})
+		return
+	}
+
+	// 2. Tenta autenticar no banco
+	usuario, err := repo.Autenticar(credenciais.Email, credenciais.Senha)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 3. Se der certo, devolve os dados do utilizador (e ele entra no sistema!)
+	c.JSON(http.StatusOK, usuario)
 }
 
 func conectar() (*sql.DB, error) {
@@ -89,12 +113,17 @@ func helloHandler(c *gin.Context) {
 // @Failure      500  {object}  map[string]string
 // @Router       /faturas [get]
 func getFaturasHandler(c *gin.Context) {
-	faturas, err := repo.Listar()
+	// Captura o parâmetro da URL (se não existir, o Go assume string vazia "")
+	gestorID := c.Query("gestor_id")
+
+	// Passamos o parâmetro para a nossa nova função inteligente
+	faturas, err := repo.Listar(gestorID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.IndentedJSON(http.StatusOK, faturas)
+
+	c.JSON(http.StatusOK, faturas)
 }
 
 // @Summary      Cria uma nova fatura
