@@ -14,13 +14,14 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext"; // 1. Importamos o AuthContext!
 
 export default function FaturaCreate() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth(); // 2. Puxamos o utilizador logado
   const [file, setFile] = useState<File | null>(null);
 
-  // A mutação CORRIGIDA recebendo o "arquivo" por injeção
   const criarFatura = useMutation({
     mutationFn: async ({
       dados,
@@ -29,8 +30,8 @@ export default function FaturaCreate() {
       dados: any;
       arquivo: File | null;
     }) => {
-      // Passo 1: POST do JSON para criar a Fatura
-      const resFatura = await fetch("http://localhost:8080/faturas", {
+      // Usando a variável de ambiente global
+      const resFatura = await fetch(`${import.meta.env.VITE_API_URL}/faturas`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(dados),
@@ -39,21 +40,17 @@ export default function FaturaCreate() {
       if (!resFatura.ok) throw new Error("Erro ao criar os dados da fatura");
 
       const faturaCriada = await resFatura.json();
-      const faturaId = faturaCriada.ID || faturaCriada.id;
+      const faturaId = faturaCriada.id || faturaCriada.ID;
 
       if (!faturaId) throw new Error("Backend não devolveu o ID da fatura");
 
-      // Passo 2: O if agora avalia a variável 'arquivo' que foi injetada
       if (arquivo) {
         const formData = new FormData();
         formData.append("file", arquivo);
 
         const resUpload = await fetch(
-          `http://localhost:8080/faturas/${faturaId}/upload`,
-          {
-            method: "POST",
-            body: formData,
-          },
+          `${import.meta.env.VITE_API_URL}/faturas/${faturaId}/upload`,
+          { method: "POST", body: formData },
         );
 
         if (!resUpload.ok)
@@ -65,11 +62,11 @@ export default function FaturaCreate() {
     onSuccess: (idCriado) => {
       toast({
         title: "Fatura criada com sucesso!",
-        description: "A fatura e o arquivo foram registrados no sistema.",
+        description: "A fatura foi vinculada ao seu usuário.",
       });
       navigate(`/faturas/${idCriado}`);
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
         title: "Erro na operação",
         description: error.message,
@@ -82,13 +79,14 @@ export default function FaturaCreate() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
 
-    // Injetando os dados e a variável 'file' fresca na mutação!
     criarFatura.mutate({
       dados: {
-        NumeroVinculo: formData.get("numero_vinculo"),
-        ValorTotal: Number(formData.get("valor_total")),
-        DataVencimento: formData.get("data_vencimento"),
-        Status: "PENDENTE_GESTOR",
+        // 3. Tudo em minúsculas para o Go entender e com o ID do Gestor!
+        numero_vinculo: formData.get("numero_vinculo"),
+        valor_total: Number(formData.get("valor_total")),
+        data_vencimento: formData.get("data_vencimento"),
+        status: "PENDENTE_GESTOR",
+        gestor_id: user?.id, // <-- AQUI! O ID VAI ESCONDIDO PARA O GO
       },
       arquivo: file,
     });
@@ -166,9 +164,6 @@ export default function FaturaCreate() {
               <SelectContent>
                 <SelectItem value="Produção">Produção</SelectItem>
                 <SelectItem value="Marketing">Marketing</SelectItem>
-                <SelectItem value="Logística">Logística</SelectItem>
-                <SelectItem value="TI">TI</SelectItem>
-                <SelectItem value="RH">RH</SelectItem>
                 <SelectItem value="Financeiro">Financeiro</SelectItem>
               </SelectContent>
             </Select>

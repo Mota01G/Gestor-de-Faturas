@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"github.com/Mota01G/Gestor-de-Faturas/internal/fatura"
 )
 
 type Usuario struct {
@@ -146,20 +148,27 @@ func (r *Repository) Deletar(id string) error {
 	return err
 }
 
-func (r *Repository) Criar(f Fatura) (string, error) {
+func (r *Repository) Criar(f fatura.Fatura) (string, error) {
 	var id string
 
-	// Adicionamos "RETURNING id" no final da query
 	err := r.db.QueryRow(`
-		INSERT INTO faturas (numero_vinculo, valor_total, data_vencimento, status)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO faturas (
+			tipo_vinculo, numero_vinculo, valor_total,
+			data_vencimento, centro_custo, possui_adiantamento,
+			status, gestor_id
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id
 	`,
+		f.TipoVinculo,
 		f.NumeroVinculo,
 		f.ValorTotal,
 		f.DataVencimento,
+		f.CentroCusto,
+		f.PossuiAdiantamento,
 		f.Status,
-	).Scan(&id) // O Scan coloca o ID gerado na nossa variável
+		f.GestorID, // O Gestor entra aqui com os demais dados
+	).Scan(&id)
 
 	if err != nil {
 		return "", err

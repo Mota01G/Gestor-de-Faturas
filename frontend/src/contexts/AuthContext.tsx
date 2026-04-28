@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useEffect,
+} from "react";
 
 type Usuario = {
   id: string;
@@ -17,10 +23,24 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<Usuario | null>(null);
+  // Inicializa lendo do localStorage para evitar a "amnésia" no F5
+  const [user, setUser] = useState<Usuario | null>(() => {
+    const userSalvo = localStorage.getItem("@gestor-faturas:user");
+    if (userSalvo) {
+      return JSON.parse(userSalvo);
+    }
+    return null;
+  });
 
-  const login = (dados: Usuario) => setUser(dados);
-  const logout = () => setUser(null);
+  const login = (dados: Usuario) => {
+    setUser(dados);
+    localStorage.setItem("@gestor-faturas:user", JSON.stringify(dados));
+  };
+
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem("@gestor-faturas:user");
+  };
 
   return (
     <AuthContext.Provider

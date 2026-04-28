@@ -137,22 +137,46 @@ func getFaturasHandler(c *gin.Context) {
 // @Failure      500     {object}  map[string]string
 // @Router       /faturas [post]
 func addFaturaHandler(c *gin.Context) {
-	var novaFatura fatura.Fatura
+	// Estrutura completa para ler tudo o que vem do formulário
+	var req struct {
+		TipoVinculo        string  `json:"tipo_vinculo"`
+		NumeroVinculo      string  `json:"numero_vinculo"`
+		ValorTotal         float64 `json:"valor_total"`
+		DataVencimento     string  `json:"data_vencimento"`
+		CentroCusto        string  `json:"centro_custo"`
+		PossuiAdiantamento bool    `json:"possui_adiantamento"`
+		Status             string  `json:"status"`
+		GestorID           string  `json:"gestor_id"`
+	}
 
-	// 1. Decodifica o JSON que veio do React
-	if err := c.ShouldBindJSON(&novaFatura); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": "Dados inválidos: " + err.Error()})
 		return
 	}
 
-	// 2. Chama o repositório que agora devolve o ID
+	var gestorPtr *string
+	if req.GestorID != "" {
+		gestorPtr = &req.GestorID
+	}
+
+	// Montamos a fatura completa
+	novaFatura := fatura.Fatura{
+		TipoVinculo:        req.TipoVinculo,
+		NumeroVinculo:      req.NumeroVinculo,
+		ValorTotal:         req.ValorTotal,
+		DataVencimento:     req.DataVencimento,
+		CentroCusto:        req.CentroCusto,
+		PossuiAdiantamento: req.PossuiAdiantamento,
+		Status:             req.Status,
+		GestorID:           gestorPtr,
+	}
+
 	idGerado, err := repo.Criar(novaFatura)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Erro ao guardar no banco de dados"})
+		c.JSON(500, gin.H{"error": "Erro ao salvar no banco: " + err.Error()})
 		return
 	}
 
-	// 3. Devolvemos a fatura com o ID preenchido para o Frontend
 	novaFatura.ID = idGerado
 	c.JSON(201, novaFatura)
 }

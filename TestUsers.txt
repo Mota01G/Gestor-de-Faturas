@@ -1,0 +1,17 @@
+Perfil Gestor (Acessa e visualiza apenas as próprias faturas):
+
+E-mail: joao.gestor@empresa.com
+
+Senha: 123456
+
+Perfil Controladoria (Visão global e aprovação):
+
+E-mail: maria.controladoria@empresa.com
+
+Senha: 123456
+
+Perfil Administrador (Acesso total):
+
+E-mail: admin@empresa.com
+
+Senha: 123456

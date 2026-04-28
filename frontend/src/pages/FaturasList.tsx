@@ -4,32 +4,22 @@ import { useQuery } from "@tanstack/react-query";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-
-// Tipo que reflete o que o nosso backend Go (Struct) devolve
-type Fatura = {
-  ID: string;
-  NumeroVinculo: string;
-  ValorTotal: number;
-  DataVencimento: string;
-  Status: any;
-  CaminhoArquivo: string | null;
-  GestorID: string | null;
-};
+import { Fatura } from "@/lib/types";
 
 export default function FaturasList() {
-  const { user } = useAuth(); // 1. Pegamos o utilizador logado!
+  const { user } = useAuth();
 
-  // 2. Trocamos o mock pelo nosso Backend Real
   const {
     data: faturas,
     isLoading,
     isError,
   } = useQuery<Fatura[]>({
-    queryKey: ["faturas", user?.id], // A chave atualiza caso troquemos de usuário
+    queryKey: ["faturas", user?.id],
     queryFn: async () => {
-      // Monta a URL dependendo do cargo da pessoa logada
-      let url = "http://localhost:8080/faturas";
-      if (user?.cargo === "GESTOR") {
+      let url = `${import.meta.env.VITE_API_URL}/faturas`;
+
+      // Apenas adiciona o filtro se o utilizador estiver definido e for GESTOR
+      if (user && user.cargo === "GESTOR") {
         url += `?gestor_id=${user.id}`;
       }
 
@@ -38,16 +28,6 @@ export default function FaturasList() {
       return res.json();
     },
   });
-
-  // 3. A Lógica de Filtro (RBAC) na interface:
-  // Se for GESTOR, filtra apenas as que têm o ID dele. Se for CONTROLADORIA/ADMIN, mostra todas.
-  const faturasFiltradas =
-    faturas?.filter((f) => {
-      if (user?.cargo === "GESTOR") {
-        return f.GestorID === user.id;
-      }
-      return true;
-    }) || [];
 
   if (isLoading) {
     return (
@@ -60,10 +40,12 @@ export default function FaturasList() {
   if (isError) {
     return (
       <div className="text-red-500 py-10">
-        Erro ao carregar as faturas. O backend está a correr?
+        Erro ao carregar as faturas. O backend está a rodar?
       </div>
     );
   }
+
+  const faturasSeguras = faturas || [];
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -71,11 +53,10 @@ export default function FaturasList() {
         <div>
           <h1 className="font-heading text-2xl font-bold">Faturas</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {faturasFiltradas.length} faturas encontradas
+            {faturasSeguras.length} faturas encontradas
           </p>
         </div>
 
-        {/* REGRAS DE NEGÓCIO: O botão só aparece para o GESTOR */}
         {user?.cargo === "GESTOR" && (
           <Link to="/faturas/nova">
             <Button className="gap-2">
@@ -109,7 +90,7 @@ export default function FaturasList() {
               </tr>
             </thead>
             <tbody>
-              {faturasFiltradas.length === 0 && (
+              {faturasSeguras.length === 0 && (
                 <tr>
                   <td
                     colSpan={5}
@@ -119,29 +100,34 @@ export default function FaturasList() {
                   </td>
                 </tr>
               )}
-              {faturasFiltradas.map((f) => (
+              {faturasSeguras.map((f) => (
                 <tr
-                  key={f.ID}
+                  key={f.id}
                   className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                 >
                   <td className="px-4 py-3">
-                    <p className="font-medium">{f.NumeroVinculo}</p>
+                    <p className="font-medium">{f.numero_vinculo}</p>
                   </td>
                   <td className="px-4 py-3 text-right font-medium tabular-nums">
-                    {f.ValorTotal.toLocaleString("pt-BR", {
+                    {f.valor_total?.toLocaleString("pt-BR", {
                       style: "currency",
                       currency: "BRL",
                     })}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {new Date(f.DataVencimento).toLocaleDateString("pt-BR")}
+                    {f.data_vencimento
+                      ? new Date(f.data_vencimento).toLocaleDateString(
+                          "pt-BR",
+                          { timeZone: "UTC" },
+                        )
+                      : "-"}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={f.Status} />
+                    <StatusBadge status={f.status} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
-                      <Link to={`/faturas/${f.ID}`}>
+                      <Link to={`/faturas/${f.id}`}>
                         <Button variant="ghost" size="icon" className="h-8 w-8">
                           <Eye className="h-4 w-4" />
                         </Button>

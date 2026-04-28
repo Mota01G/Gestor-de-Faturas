@@ -5,3 +5,5 @@ frontend/dist/
 
 # Ignorar arquivos do backend que não devem ir pro Git
 backend/uploads/
+
+gestor-de-faturas/TestUsers.txt

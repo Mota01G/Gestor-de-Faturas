@@ -20,8 +20,8 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // Chama o nosso Backend em Go!
-      const res = await fetch("http://localhost:8080/login", {
+      // Usando a variável de ambiente em vez da URL chumbada
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, senha }),
@@ -33,7 +33,6 @@ export default function Login() {
         throw new Error(data.error || "Erro ao fazer login");
       }
 
-      // Deu certo! Salva o usuário no AuthContext
       login(data);
 
       toast({
@@ -41,7 +40,6 @@ export default function Login() {
         description: `Acesso liberado como ${data.cargo}`,
       });
 
-      // Manda para o Dashboard
       navigate("/");
     } catch (error: any) {
       toast({
