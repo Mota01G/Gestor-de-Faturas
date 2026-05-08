@@ -4,8 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-
-	"github.com/Mota01G/Gestor-de-Faturas/internal/fatura"
+	// Removido o import circular problemático!
 )
 
 type Usuario struct {
@@ -35,13 +34,16 @@ func (r *Repository) Autenticar(email string, senha string) (Usuario, error) {
 }
 
 type Fatura struct {
-	ID             string
-	NumeroVinculo  string
-	ValorTotal     float64
-	DataVencimento string
-	Status         string
-	CaminhoArquivo *string
-	GestorID       *string
+	ID                 string  `json:"id"`
+	TipoVinculo        string  `json:"tipo_vinculo"`
+	NumeroVinculo      string  `json:"numero_vinculo"`
+	ValorTotal         float64 `json:"valor_total"`
+	PossuiAdiantamento bool    `json:"possui_adiantamento"`
+	DataVencimento     string  `json:"data_vencimento"`
+	CentroCusto        string  `json:"centro_custo"`
+	Status             string  `json:"status"`
+	CaminhoArquivo     *string `json:"caminho_arquivo"`
+	GestorID           *string `json:"gestor_id"`
 }
 
 type Repository struct {
@@ -54,28 +56,24 @@ func NewRepository(db *sql.DB) *Repository {
 
 func (r *Repository) GetFaturaByID(id string) (Fatura, error) {
 	var f Fatura
-	var caminho sql.NullString  // Escudo contra NULL
-	var gestorID sql.NullString // Escudo contra NULL para o dono da fatura
+	var caminho sql.NullString
+	var gestorID sql.NullString
 
+	// Adicionadas as colunas que faltavam no SELECT
 	err := r.db.QueryRow(`
-		SELECT id, numero_vinculo, valor_total, data_vencimento, status, caminho_arquivo, gestor_id
+		SELECT id, tipo_vinculo, numero_vinculo, valor_total, possui_adiantamento,
+		       data_vencimento, centro_custo, status, caminho_arquivo, gestor_id
 		FROM faturas
 		WHERE id = $1
 	`, id).Scan(
-		&f.ID,
-		&f.NumeroVinculo,
-		&f.ValorTotal,
-		&f.DataVencimento,
-		&f.Status,
-		&caminho,
-		&gestorID,
+		&f.ID, &f.TipoVinculo, &f.NumeroVinculo, &f.ValorTotal, &f.PossuiAdiantamento,
+		&f.DataVencimento, &f.CentroCusto, &f.Status, &caminho, &gestorID,
 	)
 
 	if err != nil {
 		return Fatura{}, err
 	}
 
-	// Repassa os valores seguros para a nossa Struct
 	if caminho.Valid {
 		f.CaminhoArquivo = &caminho.String
 	}
@@ -87,37 +85,32 @@ func (r *Repository) GetFaturaByID(id string) (Fatura, error) {
 }
 
 func (r *Repository) Listar(gestorID string) ([]Fatura, error) {
-	// A nossa query base
-	query := `SELECT id, numero_vinculo, valor_total, data_vencimento, status, caminho_arquivo, gestor_id FROM faturas`
-	var args []interface{} // Slice para guardar os parâmetros com segurança contra SQL Injection
+	// Query atualizada para trazer todos os campos necessários
+	query := `SELECT id, tipo_vinculo, numero_vinculo, valor_total, possui_adiantamento,
+	                 data_vencimento, centro_custo, status, caminho_arquivo, gestor_id
+	          FROM faturas`
+	var args []interface{}
 
-	// Se o comando enviou um gestor_id, adicionamos o filtro WHERE
 	if gestorID != "" {
 		query += ` WHERE gestor_id = $1`
 		args = append(args, gestorID)
 	}
 
-	// Executa a query com ou sem os filtros
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var faturas []Fatura
+	faturas := []Fatura{} // Inicializa como array vazio para evitar 'null' no JSON
 	for rows.Next() {
 		var f Fatura
 		var caminho sql.NullString
-		var dbGestorID sql.NullString // Variável interna para não conflitar
+		var dbGestorID sql.NullString
 
 		if err := rows.Scan(
-			&f.ID,
-			&f.NumeroVinculo,
-			&f.ValorTotal,
-			&f.DataVencimento,
-			&f.Status,
-			&caminho,
-			&dbGestorID,
+			&f.ID, &f.TipoVinculo, &f.NumeroVinculo, &f.ValorTotal, &f.PossuiAdiantamento,
+			&f.DataVencimento, &f.CentroCusto, &f.Status, &caminho, &dbGestorID,
 		); err != nil {
 			return nil, err
 		}
@@ -131,15 +124,6 @@ func (r *Repository) Listar(gestorID string) ([]Fatura, error) {
 
 		faturas = append(faturas, f)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	// Evita que o Go envie 'null' no JSON quando o array estiver vazio
-	if faturas == nil {
-		faturas = []Fatura{}
-	}
-
 	return faturas, nil
 }
 
@@ -148,7 +132,8 @@ func (r *Repository) Deletar(id string) error {
 	return err
 }
 
-func (r *Repository) Criar(f fatura.Fatura) (string, error) {
+// ATUALIZADO: Agora recebe apenas "Fatura" e grava todos os campos
+func (r *Repository) Criar(f Fatura) (string, error) {
 	var id string
 
 	err := r.db.QueryRow(`
@@ -206,7 +191,6 @@ func (r *Repository) AtualizarStatus(id string, novoStatus string) error {
 		return err
 	}
 
-	// Usando fmt.Errorf para uma mensagem dinâmica baseada no status esperado
 	if linhasAfetadas == 0 {
 		return fmt.Errorf("transição invalida: a fatura não está no status %s esperado", statusAtualEsperado)
 	}
@@ -216,9 +200,9 @@ func (r *Repository) AtualizarStatus(id string, novoStatus string) error {
 
 func (r *Repository) SalvarCaminhoArquivo(id string, caminho string) error {
 	_, err := r.db.Exec(`
-        UPDATE faturas
-        SET caminho_arquivo = $1, status = 'APROVADA_GESTOR'
-        WHERE id = $2
-    `, caminho, id)
+		UPDATE faturas
+		SET caminho_arquivo = $1, status = 'APROVADA_GESTOR'
+		WHERE id = $2
+	`, caminho, id)
 	return err
 }

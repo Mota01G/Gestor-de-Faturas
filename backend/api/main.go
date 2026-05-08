@@ -137,16 +137,13 @@ func getFaturasHandler(c *gin.Context) {
 // @Failure      500     {object}  map[string]string
 // @Router       /faturas [post]
 func addFaturaHandler(c *gin.Context) {
-	// Estrutura completa para ler tudo o que vem do formulário
+	// 1. Criamos a estrutura aqui dentro para ler o JSON exato que o React envia
 	var req struct {
-		TipoVinculo        string  `json:"tipo_vinculo"`
-		NumeroVinculo      string  `json:"numero_vinculo"`
-		ValorTotal         float64 `json:"valor_total"`
-		DataVencimento     string  `json:"data_vencimento"`
-		CentroCusto        string  `json:"centro_custo"`
-		PossuiAdiantamento bool    `json:"possui_adiantamento"`
-		Status             string  `json:"status"`
-		GestorID           string  `json:"gestor_id"`
+		NumeroVinculo  string  `json:"numero_vinculo"`
+		ValorTotal     float64 `json:"valor_total"`
+		DataVencimento string  `json:"data_vencimento"`
+		Status         string  `json:"status"`
+		GestorID       string  `json:"gestor_id"` // <-- O React envia o ID aqui
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -154,26 +151,25 @@ func addFaturaHandler(c *gin.Context) {
 		return
 	}
 
+	// 2. Proteção: Só envia o ID do Gestor se ele realmente existir
 	var gestorPtr *string
 	if req.GestorID != "" {
 		gestorPtr = &req.GestorID
 	}
 
-	// Montamos a fatura completa
+	// 3. Monta a entidade Fatura para enviar ao banco de dados
 	novaFatura := fatura.Fatura{
-		TipoVinculo:        req.TipoVinculo,
-		NumeroVinculo:      req.NumeroVinculo,
-		ValorTotal:         req.ValorTotal,
-		DataVencimento:     req.DataVencimento,
-		CentroCusto:        req.CentroCusto,
-		PossuiAdiantamento: req.PossuiAdiantamento,
-		Status:             req.Status,
-		GestorID:           gestorPtr,
+		NumeroVinculo:  req.NumeroVinculo,
+		ValorTotal:     req.ValorTotal,
+		DataVencimento: req.DataVencimento,
+		Status:         req.Status,
+		GestorID:       gestorPtr, // <-- Repassando o ID para o Repositório
 	}
 
+	// 4. Chama o repositório que agora salva tudo junto
 	idGerado, err := repo.Criar(novaFatura)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Erro ao salvar no banco: " + err.Error()})
+		c.JSON(500, gin.H{"error": "Erro ao guardar no banco de dados: " + err.Error()})
 		return
 	}
 

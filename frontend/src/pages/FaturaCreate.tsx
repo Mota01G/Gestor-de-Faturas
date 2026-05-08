@@ -14,13 +14,19 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/AuthContext"; // 1. Importamos o AuthContext!
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function FaturaCreate() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAuth(); // 2. Puxamos o utilizador logado
+  const { user } = useAuth();
+
   const [file, setFile] = useState<File | null>(null);
+
+  // 1. Estados para capturar os componentes do Shadcn
+  const [tipoVinculo, setTipoVinculo] = useState("");
+  const [centroCusto, setCentroCusto] = useState("");
+  const [possuiAdiantamento, setPossuiAdiantamento] = useState(false);
 
   const criarFatura = useMutation({
     mutationFn: async ({
@@ -30,7 +36,6 @@ export default function FaturaCreate() {
       dados: any;
       arquivo: File | null;
     }) => {
-      // Usando a variável de ambiente global
       const resFatura = await fetch(`${import.meta.env.VITE_API_URL}/faturas`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -79,14 +84,17 @@ export default function FaturaCreate() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
 
+    // 2. Aqui garantimos que TODOS os dados vão para o Go
     criarFatura.mutate({
       dados: {
-        // 3. Tudo em minúsculas para o Go entender e com o ID do Gestor!
+        tipo_vinculo: tipoVinculo,
         numero_vinculo: formData.get("numero_vinculo"),
         valor_total: Number(formData.get("valor_total")),
         data_vencimento: formData.get("data_vencimento"),
+        centro_custo: centroCusto,
+        possui_adiantamento: possuiAdiantamento,
         status: "PENDENTE_GESTOR",
-        gestor_id: user?.id, // <-- AQUI! O ID VAI ESCONDIDO PARA O GO
+        gestor_id: user?.id,
       },
       arquivo: file,
     });
@@ -106,10 +114,10 @@ export default function FaturaCreate() {
         className="space-y-6 rounded-xl border border-border bg-card p-6"
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          {/* Tipo de Vínculo */}
           <div className="space-y-2">
-            <Label htmlFor="tipo_vinculo">Tipo de Vínculo</Label>
-            <Select required>
+            <Label>Tipo de Vínculo</Label>
+            {/* 3. Vinculamos o state ao Select */}
+            <Select required onValueChange={setTipoVinculo}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>
@@ -154,10 +162,10 @@ export default function FaturaCreate() {
             />
           </div>
 
-          {/* Centro de Custo */}
           <div className="space-y-2">
-            <Label htmlFor="centro_custo">Centro de Custo</Label>
-            <Select required>
+            <Label>Centro de Custo</Label>
+            {/* 4. Vinculamos o state ao Select */}
+            <Select required onValueChange={setCentroCusto}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>
@@ -171,15 +179,16 @@ export default function FaturaCreate() {
 
           <div className="flex items-end gap-6 pb-1">
             <div className="flex items-center gap-2">
-              <Switch id="possui_adiantamento" />
-              <Label htmlFor="possui_adiantamento" className="text-sm">
-                Possui adiantamento
-              </Label>
+              {/* 5. Vinculamos o state ao Switch */}
+              <Switch
+                checked={possuiAdiantamento}
+                onCheckedChange={setPossuiAdiantamento}
+              />
+              <Label className="text-sm">Possui adiantamento</Label>
             </div>
           </div>
         </div>
 
-        {/* Upload */}
         <div className="space-y-2">
           <Label>Arquivo PDF</Label>
           <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border p-8 transition-colors hover:border-primary/50 hover:bg-accent/50">
@@ -205,7 +214,7 @@ export default function FaturaCreate() {
           >
             {criarFatura.isPending && (
               <Loader2 className="h-4 w-4 animate-spin" />
-            )}
+            )}{" "}
             Criar Fatura
           </Button>
           <Button
