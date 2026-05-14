@@ -2,12 +2,12 @@ package main
 
 type Fatura struct {
 	ID                 string
-	TipoVinculo        string // Faltava este
+	TipoVinculo        string
 	NumeroVinculo      string
 	ValorTotal         float64
-	PossuiAdiantamento bool // Faltava este
+	PossuiAdiantamento bool
 	DataVencimento     string
-	CentroCusto        string // Faltava este
+	CentroCusto        string
 	Status             string
 	CaminhoArquivo     *string
 	GestorID           *string
