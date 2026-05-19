@@ -1,286 +1,202 @@
-// @title           API Gestor de Faturas
-// @version         1.0
-// @description     API para gestão de faturas
-// @host            localhost:8080
-// @BasePath        /
 package main
 
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
-	"time"
 
-	_ "github.com/Mota01G/Gestor-de-Faturas/api/docs"
-	"github.com/Mota01G/Gestor-de-Faturas/internal/fatura"
+	"github.com/Mota01G/Gestor-de-Faturas/backend/internal/fatura"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 var repo *fatura.Repository
 
 func main() {
-	db, err := conectar()
+	connStr := "host=localhost port=5432 user=postgres password=postgres dbname=gestor_faturas sslmode=disable"
+	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		log.Fatal(err)
 	}
 
 	repo = fatura.NewRepository(db)
-	router := gin.Default()
-	corsConfig := cors.Config{
-		AllowOrigins: []string{"http://localhost:5173"},
-		AllowMethods: []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders: []string{
-			"Origin",
-			"Content-Type",
-			"Accept",
-			"Authorization",
-		},
-		ExposeHeaders: []string{
-			"Content-Length",
-		},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}
 
-	router.Use(cors.New(corsConfig))
-	router.GET("/faturas", getFaturasHandler)
-	router.GET("/faturas/:id", getFaturaByIDHandler)
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	router.POST("/faturas", addFaturaHandler)
-	router.POST("/faturas/:id/upload", uploadFaturaHandler)
-	router.DELETE("/faturas/:id", deleteFaturaHandler)
-	router.PATCH("/faturas/:id/status", updateStatusHandler)
-	router.Static("/uploads", "./uploads")
-	router.POST("/login", loginHandler)
-	router.Run("localhost:8080")
+	r := gin.Default()
+
+	config := cors.DefaultConfig()
+	config.AllowOrigins = []string{"http://localhost:3000", "http://localhost:5173"}
+	config.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
+	r.Use(cors.New(config))
+
+	r.Static("/uploads", "./uploads")
+
+	r.POST("/login", loginHandler)
+	r.GET("/faturas", listFaturasHandler)
+	r.GET("/faturas/:id", getFaturaHandler)
+	r.POST("/faturas", addFaturaHandler)
+	r.DELETE("/faturas/:id", deleteFaturaHandler)
+	r.POST("/faturas/:id/upload", uploadFaturaHandler)
+	r.PATCH("/faturas/:id/status", updateStatusHandler)
+
+	fmt.Println("Servidor rodando em http://localhost:8080")
+	r.Run(":8080")
 }
 
 func loginHandler(c *gin.Context) {
-	var credenciais struct {
+	var req struct {
 		Email string `json:"email"`
 		Senha string `json:"senha"`
 	}
 
-	// 1. Lê o JSON que vem do frontend
-	if err := c.ShouldBindJSON(&credenciais); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "dados em formato inválido"})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Dados inválidos"})
 		return
 	}
 
-	// 2. Tenta autenticar no banco
-	usuario, err := repo.Autenticar(credenciais.Email, credenciais.Senha)
+	user, err := repo.Autenticar(req.Email, req.Senha)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 3. Se der certo, devolve os dados do utilizador (e ele entra no sistema!)
-	c.JSON(http.StatusOK, usuario)
+	c.JSON(http.StatusOK, user)
 }
 
-func conectar() (*sql.DB, error) {
-	stringDeConexao := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		"localhost", 5432, "admin", "adminpassword", "controladoria", "disable",
-	)
-
-	db, err := sql.Open("postgres", stringDeConexao)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := db.Ping(); err != nil {
-		return nil, err
-	}
-
-	return db, nil
-}
-
-func helloHandler(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, "Meu primeiro enfpoint GET em golang")
-}
-
-// @Summary      Lista todas as faturas
-// @Description  Retorna a lista completa de faturas do banco
-// @Tags         faturas
-// @Produce      json
-// @Success      200  {array}   fatura.Fatura
-// @Failure      500  {object}  map[string]string
-// @Router       /faturas [get]
-func getFaturasHandler(c *gin.Context) {
-	// Captura o parâmetro da URL (se não existir, o Go assume string vazia "")
+func listFaturasHandler(c *gin.Context) {
 	gestorID := c.Query("gestor_id")
-
-	// Passamos o parâmetro para a nossa nova função inteligente
 	faturas, err := repo.Listar(gestorID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
 	c.JSON(http.StatusOK, faturas)
 }
 
-// @Summary      Cria uma nova fatura
-// @Description  Insere uma nova fatura no banco
-// @Tags         faturas
-// @Accept       json
-// @Produce      json
-// @Param        fatura  body      fatura.Fatura  true  "Dados da fatura"
-// @Success      201     {object}  fatura.Fatura
-// @Failure      400     {object}  map[string]string
-// @Failure      500     {object}  map[string]string
-// @Router       /faturas [post]
+func getFaturaHandler(c *gin.Context) {
+	id := c.Param("id")
+	f, err := repo.GetFaturaByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Fatura não encontrada"})
+		return
+	}
+	c.JSON(http.StatusOK, f)
+}
+
 func addFaturaHandler(c *gin.Context) {
-	// 1. Criamos a estrutura aqui dentro para ler o JSON exato que o React envia
 	var req struct {
-		NumeroVinculo  string  `json:"numero_vinculo"`
-		ValorTotal     float64 `json:"valor_total"`
-		DataVencimento string  `json:"data_vencimento"`
-		Status         string  `json:"status"`
-		GestorID       string  `json:"gestor_id"` // <-- O React envia o ID aqui
+		NumeroVinculo      string  `json:"numero_vinculo"`
+		TipoVinculo        string  `json:"tipo_vinculo"`
+		ValorTotal         float64 `json:"valor_total"`
+		DataVencimento     string  `json:"data_vencimento"`
+		CentroCusto        string  `json:"centro_custo"`
+		PossuiAdiantamento bool    `json:"possui_adiantamento"`
+		Status             string  `json:"status"`
+		GestorID           string  `json:"gestor_id"`
+		FornecedorID       string  `json:"fornecedor_id"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": "Dados inválidos: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Dados inválidos"})
 		return
 	}
 
-	// 2. Proteção: Só envia o ID do Gestor se ele realmente existir
 	var gestorPtr *string
 	if req.GestorID != "" {
 		gestorPtr = &req.GestorID
 	}
 
-	// 3. Monta a entidade Fatura para enviar ao banco de dados
 	novaFatura := fatura.Fatura{
-		NumeroVinculo:  req.NumeroVinculo,
-		ValorTotal:     req.ValorTotal,
-		DataVencimento: req.DataVencimento,
-		Status:         req.Status,
-		GestorID:       gestorPtr, // <-- Repassando o ID para o Repositório
+		TipoVinculo:        req.TipoVinculo,
+		NumeroVinculo:      req.NumeroVinculo,
+		ValorTotal:         req.ValorTotal,
+		DataVencimento:     req.DataVencimento,
+		CentroCusto:        req.CentroCusto,
+		PossuiAdiantamento: req.PossuiAdiantamento,
+		Status:             req.Status,
+		GestorID:           gestorPtr,
+		FornecedorID:       req.FornecedorID,
 	}
 
-	// 4. Chama o repositório que agora salva tudo junto
 	idGerado, err := repo.Criar(novaFatura)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Erro ao guardar no banco de dados: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	novaFatura.ID = idGerado
-	c.JSON(201, novaFatura)
+	c.JSON(http.StatusCreated, novaFatura)
 }
 
-// @Summary      Deleta uma fatura
-// @Description  Remove uma fatura do banco pelo ID
-// @Tags         faturas
-// @Param        id   path      string  true  "ID da fatura"
-// @Success      200  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /faturas/{id} [delete]
 func deleteFaturaHandler(c *gin.Context) {
 	id := c.Param("id")
 	if err := repo.Deletar(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Fatura deletada com sucesso"})
-
+	c.JSON(http.StatusOK, gin.H{"message": "Fatura removida"})
 }
 
-// @Summary      Atualiza o status de uma fatura
-// @Description  Altera o status de uma fatura pelo ID
-// @Tags         faturas
-// @Accept       json
-// @Produce      json
-// @Param        id      path      string              true  "ID da fatura"
-// @Param        status  body      map[string]string   true  "Novo status"
-// @Success      200     {object}  map[string]string
-// @Failure      400     {object}  map[string]string
-// @Failure      500     {object}  map[string]string
-// @Router       /faturas/{id}/status [patch]
+func uploadFaturaHandler(c *gin.Context) {
+	id := c.Param("id")
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Arquivo não enviado"})
+		return
+	}
+
+	if _, err := os.Stat("uploads"); os.IsNotExist(err) {
+		os.Mkdir("uploads", os.ModePerm)
+	}
+
+	ext := filepath.Ext(file.Filename)
+	newFileName := uuid.New().String() + ext
+	filePath := filepath.Join("uploads", newFileName)
+
+	if err := c.SaveUploadedFile(file, filePath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao salvar arquivo"})
+		return
+	}
+
+	if err := repo.SalvarCaminhoArquivo(id, filePath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao atualizar banco"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"url": filePath})
+}
+
 func updateStatusHandler(c *gin.Context) {
 	id := c.Param("id")
+	var req struct {
+		Status string `json:"status"`
+	}
 
-	var body map[string]string
-	if err := c.BindJSON(&body); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Dados inválidos"})
 		return
 	}
 
-	status, ok := body["status"]
-	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "campo status é obrigatório"})
-		return
-	}
-
-	if err := repo.AtualizarStatus(id, status); err != nil {
-		// 1. Verifica se é o nosso erro customizado de regra de negócio
-		if strings.Contains(err.Error(), "transição") {
+	err := repo.AtualizarStatus(id, req.Status)
+	if err != nil {
+		if strings.Contains(err.Error(), "transição invalida") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-
-		// 2. Se não contiver a palavra, é um erro real (banco caiu, etc), então devolve 500
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Status atualizado com sucesso"})
-}
-
-// @Summary      Upload de arquivo da fatura
-// @Description  Recebe o PDF da fatura, salva em disco e atualiza o status para APROVADA_GESTOR
-// @Tags         faturas
-// @Accept       multipart/form-data
-// @Produce      json
-// @Param        id    path      string  true  "ID da fatura"
-// @Param        file  formData  file    true  "Arquivo PDF da fatura"
-// @Success      200   {object}  map[string]string
-// @Failure      400   {object}  map[string]string
-// @Failure      500   {object}  map[string]string
-// @Router       /faturas/{id}/upload [post]
-func uploadFaturaHandler(c *gin.Context) {
-	id := c.Param("id")
-
-	file, err := c.FormFile("file")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "arquivo não encontrado"})
-		return
-	}
-
-	caminho := fmt.Sprintf("uploads/%s_%s", id, file.Filename)
-
-	if err := c.SaveUploadedFile(file, caminho); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao salvar arquivo"})
-		return
-	}
-
-	if err := repo.SalvarCaminhoArquivo(id, caminho); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Upload realizado com sucesso",
-		"caminho": caminho,
-	})
-}
-
-func getFaturaByIDHandler(c *gin.Context) {
-	id := c.Param("id")
-
-	fatura, err := repo.GetFaturaByID(id)
-	if err != nil {
-		// se não encontrar, devolve 404
-		c.JSON(http.StatusNotFound, gin.H{"error": "fatura não encontrada"})
-		return
-	}
-
-	c.JSON(http.StatusOK, fatura)
+	c.JSON(http.StatusOK, gin.H{"status": req.Status})
 }

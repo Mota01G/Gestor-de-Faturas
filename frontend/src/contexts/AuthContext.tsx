@@ -1,16 +1,11 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  ReactNode,
-  useEffect,
-} from "react";
+import React, { createContext, useContext, useState, ReactNode } from "react";
 
 type Usuario = {
   id: string;
   nome: string;
   email: string;
-  cargo: "GESTOR" | "CONTROLADORIA" | "ADMIN";
+  cargo: string;
+  centro_custo: string;
 };
 
 interface AuthContextType {
@@ -23,7 +18,6 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Inicializa lendo do localStorage para evitar a "amnésia" no F5
   const [user, setUser] = useState<Usuario | null>(() => {
     const userSalvo = localStorage.getItem("@gestor-faturas:user");
     if (userSalvo) {
